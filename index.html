@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>ROMA &middot; Travel Atlas</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,900;1,9..144,500&family=Spectral:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f3ead8; --paper2:#ece0c8; --ink:#241d14; --ink2:#5a4d3a;
+  --rust:#b0452c; --gold:#b8893b; --line:#cdbf9f;
+  --c-attractions:#b0452c; --c-activities:#5f7339; --c-food:#c2792b;
+  --c-hotels:#2f5d72; --c-services:#7d7468;
+  --shadow:0 18px 50px -22px rgba(40,28,12,.55);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:'Spectral',Georgia,serif;color:var(--ink);background:var(--paper)}
+#app{display:flex;height:100vh;width:100%;overflow:hidden}
+
+/* ---- Sidebar ---- */
+#side{width:380px;min-width:380px;height:100%;display:flex;flex-direction:column;
+  background:
+    radial-gradient(120% 60% at 100% 0,rgba(184,137,59,.12),transparent 60%),
+    linear-gradient(180deg,#f6efe0,#efe3cc);
+  border-right:1px solid var(--line);box-shadow:var(--shadow);z-index:1000;position:relative}
+.s-head{padding:24px 26px 16px;border-bottom:1px solid var(--line);position:relative}
+.kicker{font-family:'Spectral';font-weight:500;letter-spacing:.42em;text-transform:uppercase;
+  font-size:10px;color:var(--rust)}
+.title{font-family:'Fraunces';font-weight:900;font-size:54px;line-height:.86;letter-spacing:-.01em;margin:6px 0 2px;
+  background:linear-gradient(180deg,#2f2415,#7a3a22);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{font-style:italic;font-size:14px;color:var(--ink2);margin-top:4px}
+.s-head .deco{position:absolute;right:22px;top:22px;font-family:'Fraunces';font-size:13px;color:var(--gold);
+  text-align:right;line-height:1.3;opacity:.85}
+
+/* segmented */
+.seg{display:flex;margin:16px 26px 4px;border:1.5px solid var(--ink);border-radius:2px;overflow:hidden;background:#fff8ec}
+.seg button{flex:1;border:0;background:transparent;padding:11px 8px;font-family:'Fraunces';font-weight:600;
+  font-size:13px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;color:var(--ink);transition:.18s}
+.seg button.on{background:var(--ink);color:var(--paper)}
+.seg button+button{border-left:1.5px solid var(--ink)}
+
+.s-body{flex:1;overflow-y:auto;padding:14px 26px 30px}
+.s-body::-webkit-scrollbar{width:9px}
+.s-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
+
+/* category chips */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;
+  border:1.5px solid var(--line);background:#fff8ec;cursor:pointer;font-size:12.5px;font-weight:500;
+  letter-spacing:.02em;transition:.15s;user-select:none}
+.chip .dot{width:10px;height:10px;border-radius:50%}
+.chip .ct{font-family:'Fraunces';font-weight:600;font-size:11px;opacity:.6;margin-left:2px}
+.chip.on{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.chip.on .ct{opacity:.8;color:var(--paper)}
+.chip.all.on{background:var(--rust);border-color:var(--rust)}
+
+.muted{font-size:12.5px;color:var(--ink2);font-style:italic;line-height:1.5;margin:2px 0 10px}
+.divider{height:1px;background:var(--line);margin:14px 0;position:relative}
+.divider::after{content:"\2766";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  background:linear-gradient(180deg,#f6efe0,#efe3cc);padding:0 10px;color:var(--gold);font-size:13px}
+
+/* explore list */
+.plist{display:flex;flex-direction:column;gap:2px}
+.pl-cat{font-family:'Fraunces';font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.18em;
+  color:var(--ink2);margin:12px 0 5px}
+.pl{display:flex;align-items:flex-start;gap:10px;padding:8px 9px;border-radius:6px;cursor:pointer;transition:.13s;border:1px solid transparent}
+.pl:hover{background:#fff5e3;border-color:var(--line)}
+.pl .bar{width:4px;align-self:stretch;border-radius:3px;flex:none}
+.pl .nm{font-size:14px;font-weight:500;line-height:1.25}
+.pl .meta{font-size:11.5px;color:var(--ink2);font-style:italic;margin-top:1px}
+
+/* search */
+.search{width:100%;padding:11px 14px;border:1.5px solid var(--line);border-radius:4px;background:#fff8ec;
+  font-family:'Spectral';font-size:14px;color:var(--ink);margin-bottom:10px}
+.search:focus{outline:0;border-color:var(--rust)}
+
+/* route select rows */
+.rrow{display:flex;align-items:center;gap:11px;padding:8px 9px;border-radius:6px;cursor:pointer;transition:.12s;border:1px solid transparent}
+.rrow:hover{background:#fff5e3}
+.rrow.sel{background:#fff;border-color:var(--ink)}
+.rcheck{width:20px;height:20px;border:1.6px solid var(--ink2);border-radius:4px;flex:none;display:flex;
+  align-items:center;justify-content:center;font-size:13px;color:#fff;transition:.12s;background:#fff8ec}
+.rrow.sel .rcheck{background:var(--rust);border-color:var(--rust)}
+.rrow.disabled{opacity:.38;cursor:not-allowed}
+.rnm{font-size:13.5px;line-height:1.2}
+.rmeta{font-size:11px;color:var(--ink2);font-style:italic}
+.ridx{margin-left:auto;font-family:'Fraunces';font-weight:700;font-size:13px;color:var(--rust);min-width:18px;text-align:right}
+
+/* selection footer */
+.sel-foot{padding:14px 26px;border-top:1px solid var(--line);background:#efe3cc}
+.counter{display:flex;align-items:baseline;justify-content:space-between;font-size:13px;margin-bottom:10px}
+.counter b{font-family:'Fraunces';font-size:22px;color:var(--rust)}
+.counter .hint{font-style:italic;color:var(--ink2);font-size:12px}
+.btn{width:100%;padding:13px;border:0;border-radius:3px;font-family:'Fraunces';font-weight:600;font-size:14px;
+  letter-spacing:.07em;text-transform:uppercase;cursor:pointer;transition:.16s;background:var(--ink);color:var(--paper)}
+.btn:disabled{background:var(--line);color:#9a8e74;cursor:not-allowed}
+.btn.rust{background:var(--rust)}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--ink);margin-top:8px}
+
+/* route summary */
+.route-sum{}
+.rs-stat{display:flex;gap:14px;margin:4px 0 14px}
+.rs-card{flex:1;background:#fff8ec;border:1px solid var(--line);border-radius:6px;padding:11px 13px;text-align:center}
+.rs-card .v{font-family:'Fraunces';font-weight:900;font-size:25px;color:var(--rust);line-height:1}
+.rs-card .l{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);margin-top:5px}
+.leg{display:flex;align-items:center;gap:11px;padding:9px 4px}
+.legn{width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--paper);display:flex;
+  align-items:center;justify-content:center;font-family:'Fraunces';font-weight:700;font-size:13px;flex:none}
+.legname{font-size:13.5px;font-weight:500;line-height:1.15}
+.legcat{font-size:11px;color:var(--ink2);font-style:italic}
+.legdist{margin-left:auto;font-size:11.5px;color:var(--rust);font-weight:600;white-space:nowrap}
+.legbar{margin-left:13px;border-left:2px dashed var(--line);height:13px}
+
+/* ---- Map ---- */
+#map{flex:1;height:100%;background:#e8e0cf}
+.leaflet-container{font-family:'Spectral',serif;background:#eee6d4}
+
+/* marker pin */
+.pin{position:relative;width:30px;height:30px;transform:translate(-50%,-100%)}
+.pin .body{width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+  border:2.5px solid #fff;box-shadow:0 4px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
+.pin .ic{transform:rotate(45deg);font-size:14px;line-height:1}
+.pin.dim .body{opacity:.45}
+.pin .badge{position:absolute;top:-9px;right:-9px;width:21px;height:21px;border-radius:50%;background:var(--ink);
+  color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces';font-weight:700;font-size:11px;z-index:5}
+
+/* info card tooltip */
+.leaflet-tooltip.info-card{background:#fbf4e4;border:1.5px solid var(--ink);border-radius:7px;
+  box-shadow:0 22px 50px -18px rgba(30,20,8,.6);padding:0;max-width:312px;white-space:normal;
+  font-family:'Spectral';color:var(--ink);opacity:1!important}
+.leaflet-tooltip.info-card:before{display:none}
+.ic-head{padding:13px 15px 10px;border-bottom:1px dashed var(--line);position:relative}
+.ic-cat{font-family:'Fraunces';font-weight:600;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase}
+.ic-name{font-family:'Fraunces';font-weight:700;font-size:18px;line-height:1.12;margin-top:4px}
+.ic-body{padding:10px 15px 14px;max-height:260px;overflow:auto}
+.ic-row{margin:7px 0}
+.ic-k{font-family:'Fraunces';font-weight:600;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--rust)}
+.ic-v{font-size:12.8px;line-height:1.4;margin-top:1px}
+.ic-tag{position:absolute;right:13px;top:13px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+  background:var(--gold);color:#fff;padding:2px 7px;border-radius:3px;font-family:'Fraunces';font-weight:600}
+
+/* mobile toggle */
+#menu-btn{display:none;position:absolute;top:14px;left:14px;z-index:1400;background:var(--ink);color:var(--paper);
+  border:0;border-radius:4px;padding:11px 14px;font-family:'Fraunces';font-weight:600;cursor:pointer;box-shadow:var(--shadow)}
+.legend{position:absolute;right:14px;bottom:24px;z-index:800;background:#fbf4e4ee;border:1px solid var(--line);
+  border-radius:6px;padding:11px 14px;font-size:11.5px;box-shadow:var(--shadow)}
+.legend .lr{display:flex;align-items:center;gap:8px;margin:3px 0}
+.legend .ld{width:11px;height:11px;border-radius:50%}
+.legend h4{margin:0 0 6px;font-family:'Fraunces';font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+
+.leg-dist-label{background:#fff;border:1.4px solid var(--rust);border-radius:11px;padding:2px 8px;
+  font-family:'Fraunces';font-weight:700;font-size:11px;color:var(--rust);white-space:nowrap;box-shadow:0 3px 7px rgba(0,0,0,.2)}
+.leg-dist-label:before{display:none}
+
+@media(max-width:860px){
+  #side{position:absolute;left:0;top:0;height:100%;transform:translateX(-100%);transition:.32s cubic-bezier(.4,0,.2,1);width:86%;min-width:0;max-width:380px}
+  #side.open{transform:translateX(0)}
+  #menu-btn{display:block}
+  .title{font-size:46px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="s-head">
+      <div class="kicker">Italy &middot; Travel Guide 2026</div>
+      <div class="title">ROMA</div>
+      <div class="sub">An interactive atlas of the Eternal City</div>
+      <div class="deco">S.P.Q.R.<br>67 places</div>
+    </div>
+    <div class="seg">
+      <button id="seg-explore" class="on" onclick="setMode('explore')">Explore</button>
+      <button id="seg-route" onclick="setMode('route')">Plan Route</button>
+    </div>
+    <div class="s-body" id="sbody"></div>
+    <div id="selfoot"></div>
+  </aside>
+  <div id="map"></div>
+  <button id="menu-btn" onclick="toggleMenu()">&#9776; Menu</button>
+  <div class="legend" id="legend"></div>
+</div>
+
+<script>
+const DATA = {"tabs": [{"key": "attractions", "label": "Attractions", "icon": "🏛", "sheet": "Rome Attractions"}, {"key": "activities", "label": "Activities", "icon": "🎫", "sheet": " Activities"}, {"key": "food", "label": "Food & Drink", "icon": "🍝", "sheet": "Restaurants & F&B"}, {"key": "services", "label": "Services", "icon": "🛠", "sheet": "Utilities & Services"}, {"key": "hotels", "label": "Hotels", "icon": "🛏", "sheet": "Hotels"}], "places": [{"name": "Vatican Museums & Sistine Chapel", "Area / District": "Vatican", "Rating": "☆☆☆☆☆", "Type": "Museum / Religious", "Duration (hrs)": "3–4", "Best Time to Visit": "8:00 AM slot", "Ticket Price (EUR)": "€20 + €5 online fee = €25", "Ticket Price (USD)": "27", "Booking Link": "Vatican Museum", "Booking Method": "Online (60 days ahead)", "Reviews (approx)": "~250,000", "Notes": "Book 4 - 6 weeks ahead. 8:00 AM entry has fewer crowds in Sistine Chapel. No photos allowed in Sistine. Dress code: shoulders + knees covered. Sistine Chapel restoration finalized.", "lat": 41.9065, "lng": 12.4536, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "St. Peter's Basilica", "Rating": "☆☆☆☆☆", "Type": "Religious / Viewpoint", "Duration (hrs)": "1.5–2", "Best Time to Visit": "7:00–8:30 AM", "Ticket Price (EUR)": "Free (Basilica) | Dome: €8 stairs / €10 lift", "Ticket Price (USD)": "9", "Booking Link": "Saint Peter Basilica", "Booking Method": "Walk-in / Dome ticket onsite", "Reviews (approx)": "~190,000", "Notes": "Get there 7 AM to skip security line. Dome climb has 320 stairs (or lift + 170 stairs).", "lat": 41.9022, "lng": 12.4539, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "St. Peter's Square", "Rating": "☆☆☆☆☆", "Type": "Historical", "Duration (hrs)": "30m - 1h", "Best Time to Visit": "7:00 - 8:30 AM", "Ticket Price (EUR)": "Free | Papal Audience: Free (register via Vatican)", "Ticket Price (USD)": "Free", "Booking Link": "Wednesday Papal Audience tickets", "Booking Method": "Walk-in", "Reviews (approx)": "~95,000", "Notes": "Bernini's elliptical colonnade. Two 'magic points' on ground where 4 columns appear as 1. Wednesday 10:30am Papal Audience, free tickets must be requested via Vatican website in advance.", "lat": 41.9022, "lng": 12.4568, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Castel Sant'Angelo", "Type": "Historical / Viewpoint", "Duration (hrs)": "1.5 - 2", "Best Time to Visit": "Late afternoon (sunset)", "Ticket Price (EUR)": "€16 + €2 booking", "Ticket Price (USD)": "20", "Booking Link": "Castel Sant’Angelo", "Booking Method": "Online or onsite", "Reviews (approx)": "~75,000", "Notes": "Former Hadrian's mausoleum, then papal fortress. Rooftop terrace with panoramic view of Rome + Vatican across the Tiber. Less crowded than other monuments. Stunning at golden hour.", "lat": 41.9031, "lng": 12.4663, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Colosseum", "Area / District": "Ancient Rome", "Rating": "☆☆☆☆☆", "Type": "Historical", "Duration (hrs)": "2 - 3", "Best Time to Visit": "8:30 AM first slot", "Ticket Price (EUR)": "€18 + €2 (Standard) | €25 Arena | €30 Underground", "Ticket Price (USD)": "22", "Booking Link": "Colosseum", "Booking Method": "Online 30 days ahead", "Reviews (approx)": "~430,000", "Notes": "Ticket includes Roman Forum + Palatine Hill (valid 24h). Underground/Arena slots release 30 days prior and sell out in minutes. Standard ticket plenty for most.", "lat": 41.8902, "lng": 12.4922, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Roman Forum & Palatine Hill", "Rating": "☆☆☆☆", "Type": "Historical", "Duration (hrs)": "2 - 3", "Best Time to Visit": "Right after Colosseum", "Ticket Price (EUR)": "Included with Colosseum", "Booking Link": "Colosseum", "Booking Method": "Same ticket as Colosseum", "Reviews (approx)": "~140,000", "Notes": "Enter via Palatine Hill side (Via di San Gregorio) - way shorter line than Colosseum side. Palatine Hill has great panoramic shots of Forum below. Bring sturdy shoes (cobblestones + dirt paths). Can check while visiting Colosseum", "lat": 41.8925, "lng": 12.4853, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Capitoline Museums", "Rating": "☆☆☆", "Type": "Museum", "Duration (hrs)": "2 - 3", "Best Time to Visit": "Late morning", "Ticket Price (EUR)": "€16 + €1 booking", "Ticket Price (USD)": "21.5", "Booking Link": "Capitoline Museums", "Booking Method": "Online or onsite", "Reviews (approx)": "~30,000", "Notes": "World's oldest public museum (1471). Has the original Capitoline Wolf bronze. Tabularium offers Forum view from above. Designed by Michelangelo.", "lat": 41.8932, "lng": 12.4828, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Pantheon", "Rating": "☆☆☆☆☆", "Type": "Historical / Religious", "Duration (hrs)": "0.5 - 1", "Best Time to Visit": "Early morning or evening", "Ticket Price (EUR)": "€5 (Mon - Sat) | Free Sundays + holidays", "Ticket Price (USD)": "5", "Booking Link": "Pantheon", "Booking Method": "Online or onsite", "Reviews (approx)": "~340,000", "Notes": "World's largest unreinforced concrete dome - engineering miracle 2,000 yrs old. Free on first Sunday of month + religious holidays. Inside takes 15 min; spend more time at the piazza (Bar Sant'Eustachio nearby for legendary coffee).", "lat": 41.8986, "lng": 12.4769, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Trevi Fountain", "Area / District": "Centro Storico", "Rating": "☆☆☆☆", "Type": "Historical / Iconic", "Duration (hrs)": "0.5", "Best Time to Visit": "6 - 7 AM or after 11 PM", "Ticket Price (EUR)": "Free", "Ticket Price (USD)": "Free", "Booking Link": "-", "Reviews (approx)": "~500,000", "Notes": "Toss coin over LEFT shoulder with RIGHT hand. Lit beautifully at night. Pickpocketing area - keep wallet zipped.", "lat": 41.9009, "lng": 12.4833, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Piazza Navona", "Rating": "☆☆☆☆", "Type": "Historical / Plaza", "Duration (hrs)": "0.5 - 1", "Best Time to Visit": "Evening", "Ticket Price (EUR)": "Free", "Ticket Price (USD)": "Free", "Booking Link": "-", "Reviews (approx)": "~150,000", "Notes": "Built on Domitian's stadium (still oval-shaped). Bernini's Four Rivers Fountain in middle. Cafés around the edge are tourist traps - drink/eat one street over. Street performers at night.", "lat": 41.8992, "lng": 12.4731, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Galleria Borghese", "Area / District": "Villa Borghese", "Rating": "☆☆☆☆", "Type": "Museum / Art", "Duration (hrs)": "2", "Best Time to Visit": "Last slot (5 PM)", "Ticket Price (EUR)": "€75 booking", "Ticket Price (USD)": "$24 - $75 (Check the booking site)", "Booking Link": "Galleria Borghese", "Booking Method": "mandatory online", "Reviews (approx)": "~28,000", "Notes": "Strictly timed entry (2 hours max). Must book online weeks ahead - no walk-ins. Bernini's 'Apollo and Daphne' sculpture is worth the trip alone. Free locker for bags. Fit if into Bernini sculptures.", "lat": 41.9142, "lng": 12.492, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Villa Borghese Park & Pincian Hill", "Rating": "☆☆☆", "Type": "Park / Viewpoint", "Duration (hrs)": "1.5 - 2", "Best Time to Visit": "Late afternoon", "Ticket Price (EUR)": "Free | Rowboat rental ~€4/20min", "Ticket Price (USD)": "Free", "Booking Link": "-", "Reviews (approx)": "~95,000", "Notes": "Largest public park in Rome. Rent bikes (€4 - 5/hr) or paddleboats on the lake. Terrazza del Pincio is the best free panoramic view of Rome at sunset. Great picnic spot.", "lat": 41.9128, "lng": 12.4847, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Piazza del Popolo", "Rating": "☆☆☆☆", "Type": "Plaza / Historical", "Duration (hrs)": "0.5", "Best Time to Visit": "Walk through anytime", "Ticket Price (EUR)": "Free", "Ticket Price (USD)": "Free", "Booking Link": "-", "Reviews (approx)": "~110,000", "Notes": "Twin churches + 3,200-year-old Egyptian obelisk in center. Two Caravaggios free inside Santa Maria del Popolo church. Climb Pincian Hill steps from here. Can combine with Villa Borghese walk.", "lat": 41.9109, "lng": 12.4763, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Trastevere Neighborhood", "Area / District": "Trastevere", "Rating": "☆☆☆☆☆", "Type": "Neighborhood", "Duration (hrs)": "2 - 3", "Best Time to Visit": "Evening (6 - 10 PM)", "Ticket Price (EUR)": "Free", "Ticket Price (USD)": "Free", "Booking Link": "-", "Notes": "Medieval lanes, ivy walls, hidden courtyards. Best gelato @ Otaleg or Fior di Luna. Comes alive at night.", "lat": 41.8896, "lng": 12.4694, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Basilica of Santa Maria in Trastevere", "Rating": "☆☆☆☆", "Type": "Religious", "Duration (hrs)": "0.5", "Best Time to Visit": "Daytime (free)", "Ticket Price (EUR)": "Free", "Ticket Price (USD)": "Free", "Booking Link": "-", "Reviews (approx)": "~22,000", "Notes": "One of Rome's oldest churches (340 AD). Stunning 12th century gold mosaics inside, especially with afternoon light. Quick stop while wandering Trastevere. Religious site (quick add to Trastevere walk)", "lat": 41.8895, "lng": 12.4695, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Aventine Keyhole (Knights of Malta)", "Area / District": "Aventine", "Rating": "☆☆☆☆☆", "Type": "Hidden Gem / Viewpoint", "Duration (hrs)": "0.25", "Best Time to Visit": "Morning (less line)", "Ticket Price (EUR)": "Free", "Ticket Price (USD)": "Free", "Booking Link": "-", "Reviews (approx)": "~18,000", "Notes": "Look through the keyhole in the Knights of Malta door to see St. Peter's Basilica dome framed perfectly through a garden hedge tunnel. 30-sec experience but utterly unique. Combine with Giardino degli Aranci (Orange Garden) viewpoint 2 min walk away.", "lat": 41.8838, "lng": 12.4779, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Giardino degli Aranci (Orange Garden)", "Rating": "☆☆☆☆", "Type": "Park / Viewpoint", "Duration (hrs)": "0.5", "Best Time to Visit": "Sunset", "Ticket Price (EUR)": "Free", "Ticket Price (USD)": "Free", "Booking Link": "-", "Reviews (approx)": "~25,000", "Notes": "Best free sunset view of Rome (over Tiber + St. Peter's). Smell of orange trees. Combine with Aventine Keyhole 2 min away.", "lat": 41.8845, "lng": 12.4787, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Catacombs of San Callisto", "Area / District": "South Rome", "Rating": "☆☆☆☆", "Type": "Historical / Underground", "Duration (hrs)": "1", "Best Time to Visit": "Late morning", "Ticket Price (EUR)": "€10 (guided)", "Ticket Price (USD)": "11", "Booking Link": "St. Callixtus Catacombs", "Booking Method": "Onsite or online", "Reviews (approx)": "~17,000", "Notes": "20m underground burial network from 2nd–5th AD. Mandatory guided tour (~45 min). Take Bus 118 from Circus Maximus. Closed Wednesdays. Wear a layer - it's cool below.", "lat": 41.8585, "lng": 12.5145, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Testaccio Market & Food Tour Self-Guide", "Area / District": "Testaccio", "Rating": "☆☆☆☆☆", "Type": "Market / Food", "Duration (hrs)": "1.5", "Best Time to Visit": "9 AM - 1 PM", "Ticket Price (EUR)": "Free (entry); spend €10–20 or more on food", "Ticket Price (USD)": "Free", "Booking Link": "-", "Reviews (approx)": "~9,000", "Notes": "Not touristy at all, original Rome taste - neighborhood food market. Famous stalls: Mordi e Vai (boiled-beef sandwich), Casa Manco (Roman-style pizza by weight). Walk to nearby Monte Testaccio (artificial hill of broken ancient amphorae) after. Check titkok link for details of food.", "lat": 41.8772, "lng": 12.4754, "cat": "attractions", "catLabel": "Attractions", "icon": "🏛", "citywide": false}, {"name": "Vatican Early Morning Access + Breakfast", "Why Unique": "Enter Vatican Museums 1 Hour before public, walk near-empty Sistine Chapel. Buffet breakfast inside museum cortile. Single most exclusive Vatican experience publicly available.", "Cost EUR": "€85–110", "Cost USD": "104", "Schedule / Time": "7:00–7:30 AM entry", "Duration": "3 - 4 hrs", "Group Size": "15 - 25 ppl", "Booking Req. & Deadline": "Book 3 - 6 weeks ahead via Vatican site or Walks of Italy", "Booking Link": "Walks Of Italy", "Cancellation": "24–48h notice (varies)", "Practical Notes": "Sistine Chapel near-empty for 30 min is an exclusive experience. Coffee + cornetto breakfast in cortile. Bring layers (museums cool early).", "lat": 41.9065, "lng": 12.4536, "cat": "activities", "catLabel": "Activities", "icon": "🎫", "citywide": false}, {"name": "Vatican Scavi Tour (Necropolis under St. Peter's)", "Why Unique": "Walk through 2,000-yr-old Roman necropolis directly under St. Peter's altar. See St. Peter's tomb itself. Only 250 people/day allowed worldwide.", "Cost EUR": "€13", "Cost USD": "14", "Schedule / Time": "By appointment", "Duration": "1.5 hrs", "Group Size": "Max 12", "Booking Req. & Deadline": "Must email scavi@fsp.va 2 - 3 MONTHS ahead", "Booking Link": "Vatican Scavi", "Cancellation": "By email", "Practical Notes": "Email scavi@fsp.va with dates + names + age. Tour in English most days at 11 AM/2 PM. Most exclusive thing in Rome.", "lat": 41.9018, "lng": 12.4537, "cat": "activities", "catLabel": "Activities", "icon": "🎫", "citywide": false}, {"name": "Catacombs Private After-Hours Tour", "Why Unique": "After-hours private group tour into the Catacombs of San Sebastiano or Domitilla - no other tourists, candlelight portions in some routes.", "Cost EUR": "€80–130", "Cost USD": "120", "Schedule / Time": "6–8 PM (varies)", "Duration": "2 hrs", "Group Size": "Max 12", "Booking Req. & Deadline": "GetYourGuide / Walks of Italy 2 weeks ahead", "Booking Link": "Walks Of Italy", "Cancellation": "24h free", "Practical Notes": "More intimate than San Callisto daytime tour. Bring layer (12°C below ground year-round). Combine with Appian Way bike afterwards.", "lat": 41.8555, "lng": 12.51, "cat": "activities", "catLabel": "Activities", "icon": "🎫", "citywide": false}, {"name": "Gladiator School (Gruppo Storico Romano)", "Why Unique": "Train in authentic gladiator combat on the Appian Way with real Roman re-enactors. Wear tunic, learn to fight with wooden gladius.", "Cost EUR": "€90–110", "Cost USD": "109", "Schedule / Time": "Daily ~2:30 PM", "Duration": "2 hrs", "Group Size": "6–15 ppl", "Booking Req. & Deadline": "gsr-roma.com or Klook 1 week ahead", "Booking Link": "gruppostoricoromano.it", "Cancellation": "48h free", "Practical Notes": "~30 min from city center (Appian Way). Bus 118 or Uber. Receive certificate + souvenir wooden sword. Combine with Appian Way bike rental same day.", "lat": 41.8556, "lng": 12.5072, "cat": "activities", "catLabel": "Activities", "icon": "🎫", "citywide": false}, {"name": "Papal Audience (Wednesdays)", "Why Unique": "Free admission to the General Audience with the Pope in St. Peter's Square (Sep–Oct held outdoors). 30K+ pilgrims, prayers + blessing.", "Cost EUR": "Free", "Cost USD": "Free", "Schedule / Time": "Wed 9:00 AM (Sep–Oct)", "Duration": "1.5 hrs", "Group Size": "30K+ (open)", "Booking Req. & Deadline": "Free tickets", "Booking Link": "-", "Cancellation": "N/A (free)", "Practical Notes": "Email prefettura.casapontificalis@vatican.va 30 - 60 days ahead. Free but request needed. Heavy security; no large bags. Sit on right side for best view.", "lat": 41.9022, "lng": 12.4568, "cat": "activities", "catLabel": "Activities", "icon": "🎫", "citywide": false}, {"name": "Roman Hot Springs Day Trip (Terme di Saturnia)", "Why Unique": "Natural sulfur hot springs 2.5 hrs north of Rome. Cascate del Mulino free for outdoor pools, postcard-perfect terraces.", "Cost EUR": "€0 (free pools) | €30+ resort", "Cost USD": "27", "Schedule / Time": "All day", "Duration": "Full day", "Group Size": "Self-organized", "Booking Req. & Deadline": "Rent car or take tour", "Booking Link": "Cascate del Mulino", "lat": 42.6536, "lng": 11.517, "cat": "activities", "catLabel": "Activities", "icon": "🎫", "citywide": false}, {"name": "Football Match at Stadio Olimpico (AS Roma or Lazio)", "Why Unique": "Catch a Serie A match in 70K-seat Olympic Stadium. Atmosphere = thunderous Curva Sud chants. Iconic Italian sporting experience.", "Cost EUR": "€25–80", "Cost USD": "55", "Schedule / Time": "Most Sat–Sun (check fixture)", "Duration": "3 hrs", "Group Size": "Self-go", "Booking Req. & Deadline": "asroma.com or sslazio.it (need to register w/ Tessera del Tifoso)", "Booking Link": "AS Roma", "Cancellation": "Re-sale platform", "Practical Notes": "Italy requires fan ID for some matches. Easiest: book through official site. Distinti or Tribuna Tevere sections are safest for tourists. Don't wear opposing team colors.", "lat": 41.9339, "lng": 12.4547, "cat": "activities", "catLabel": "Activities", "icon": "🎫", "citywide": false}, {"name": "Underground Rome: Basilica of San Clemente", "Why Unique": "3 layers stacked: modern church (12th c) → ancient church (4th c) → pagan Mithras temple + Roman streets (1st c). Walk down 2,000 yrs.", "Cost EUR": "€10 (incl. lower levels)", "Cost USD": "11", "Schedule / Time": "9 AM–12:30, 3–6 PM", "Duration": "1 hr", "Group Size": "Self-go", "Booking Req. & Deadline": "Onsite, no advance booking needed", "Booking Link": "basilicasanclemente.com", "Practical Notes": "Located 2 min from Colosseum. Pair with Colosseum same day. Way less crowded than other underground sites.", "lat": 41.8894, "lng": 12.4977, "cat": "activities", "catLabel": "Activities", "icon": "🎫", "citywide": false}, {"name": "Da Enzo al 29", "Area": "Trastevere", "Cuisine Type": "Classic Roman trattoria", "Price / Person (EUR)": "€30–45", "Price / Person (USD)": "41", "Reservation": "Essential", "Booking Link": "daenzoal29.com", "Signature Dishes": "Cacio e Pepe; Carbonara; Coda alla Vaccinara (oxtail); Tonnarelli with anchovies", "Signature Drinks": "House Frascati white; Negroni; Limoncello digestif", "Awards / Recognition": "Gambero Rosso recommended; consistently top-5 Roman trattorias 2020–2026", "Best Time to Go": "Early dinner 7:30 PM", "Dress Code": "Casual", "Why Must-Try": "Tiny family-run trattoria, no shortcuts. The place to try Roman classics done right. Walk-ins wait 1+ hr.", "lat": 41.8884, "lng": 12.4775, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Roscioli Salumeria con Cucina", "Area": "Centro Storico", "Cuisine Type": "Modern Roman + Salumi", "Price / Person (EUR)": "€55–85", "Price / Person (USD)": "76", "Reservation": "Essential 2+ wks ahead", "Booking Link": "salumeriaroscioli.com", "Signature Dishes": "Carbonara (often cited 'best in Rome'); Burrata di Andria; 24-month Parma; Amatriciana", "Signature Drinks": "800+ wine list (sommelier-curated); Negroni Sbagliato; classic spritz", "Awards / Recognition": "50 Top Pizza Italia; Gambero Rosso 2 Forchette; Conde Nast Hot List", "Best Time to Go": "Lunch 1 PM or dinner 8 PM", "Dress Code": "Smart casual", "Why Must-Try": "Best carbonara in Rome by many accounts. Half deli/half restaurant - eat next to glass case of curing meats.", "lat": 41.8945, "lng": 12.4724, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Pizzarium Bonci", "Area": "Prati", "Cuisine Type": "Pizza al Taglio (by the cut)", "Price / Person (EUR)": "€8–15", "Price / Person (USD)": "13", "Reservation": "None (counter)", "Booking Link": "-", "Signature Dishes": "Roman-style focaccia pizza by weight; rotating 20+ daily toppings (mortadella + pistachio, potato + truffle)", "Signature Drinks": "Craft beers on tap; Italian sodas", "Awards / Recognition": "Often called 'best pizza al taglio in the world'; Bonci is a celebrity chef", "Best Time to Go": "Lunch 12:30", "Dress Code": "Anything", "Why Must-Try": "Gabriele Bonci's flagship - innovative pizza by weight. You point at slices, they weigh, you stand and eat. Quick, cheap, world-class.", "lat": 41.907, "lng": 12.4456, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Pizzeria Da Remo", "Area": "Testaccio", "Cuisine Type": "Roman-style thin pizza", "Price / Person (EUR)": "€10–18", "Price / Person (USD)": "15", "Reservation": "None - queue", "Booking Link": "-", "Signature Dishes": "Roman pizza (paper-thin, charred crust); Bruschetta; Suppli (fried risotto balls)", "Signature Drinks": "Birra Peroni in big bottles; house red", "Awards / Recognition": "#1 Roman-style pizzeria on most local lists", "Best Time to Go": "Dinner 7:30 PM (queue starts 8)", "Dress Code": "Casual", "Why Must-Try": "THE iconic Roman pizzeria - no frills, paper menus you check with a pencil. Locals only. Cash Often Prefered.", "lat": 41.8779, "lng": 12.476, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Trapizzino", "Area": "Trastevere / Termini / 4 locations", "Cuisine Type": "Street Food (Roman sandwich)", "Price / Person (EUR)": "€5–10", "Price / Person (USD)": "9", "Booking Link": "trapizzino.it", "Signature Dishes": "Trapizzino (triangular pizza pocket): chicken cacciatora, polpette al sugo, tongue in green sauce", "Signature Drinks": "Craft Italian beer; biodynamic wines by the glass", "Awards / Recognition": "Featured in Netflix 'Chef's Table: Street Food'; expanding to NYC + Paris", "Best Time to Go": "Lunch or late-night", "Dress Code": "Anything", "Why Must-Try": "Roman invention by Stefano Callegari - pizza dough pocket filled with classic Italian stews. Cheap, novel, delicious. Eat 2.", "lat": 41.8754, "lng": 12.4745, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Pierluigi", "Area": "Centro Storico", "Cuisine Type": "Seafood / Roman", "Price / Person (EUR)": "€80–140", "Price / Person (USD)": "120", "Reservation": "Essential - book 2 wks", "Booking Link": "pierluigi.it", "Signature Dishes": "Spaghetti alle Vongole; Crudo di mare (raw seafood platter); Branzino al sale; Linguine all'aragosta", "Signature Drinks": "Champagne list; 1,500+ wine cellar", "Awards / Recognition": "Gambero Rosso 2 Forchette; on every 'best seafood Rome' list", "Best Time to Go": "Dinner 8:30 PM on the terrace", "Dress Code": "Smart", "Why Must-Try": "Best seafood in Rome. Outdoor terrace on quiet piazza is magical. Famous people often spotted. Splurge night.", "lat": 41.8956, "lng": 12.4708, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Salumeria Roscioli (Forno)", "Area": "Centro Storico", "Cuisine Type": "Bakery / Snack", "Price / Person (EUR)": "€3–8", "Price / Person (USD)": "5", "Booking Link": "anticofornoroscioli.it", "Signature Dishes": "Pizza bianca (foundational Roman flatbread); Pizza rossa; Maritozzo (sweet brioche w/ cream)", "Signature Drinks": "Espresso", "Awards / Recognition": "100+ yr tradition; consistently top Roman bakeries", "Best Time to Go": "Breakfast 8 AM", "Why Must-Try": "Sister bakery 50m from Roscioli restaurant. Pizza bianca = Roman daily bread. Maritozzo = world's best breakfast pastry. Stand and eat.", "lat": 41.8951, "lng": 12.4726, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Armando al Pantheon", "Area": "Pantheon", "Cuisine Type": "Traditional Roman", "Price / Person (EUR)": "€45–65", "Price / Person (USD)": "60", "Reservation": "Essential 1+ wk", "Booking Link": "armandoalpantheon.it", "Signature Dishes": "Cacio e Pepe; Saltimbocca alla Romana; Trippa alla Romana (tripe); Carciofo alla Giudia (artichoke)", "Signature Drinks": "Strong house cellar; Cesanese del Piglio (Lazio red)", "Awards / Recognition": "Michelin Bib Gourmand 2024 + 2025; Forbes top-5 Rome trattorias", "Best Time to Go": "Lunch 1 PM (less competitive)", "Dress Code": "Smart casual", "Why Must-Try": "50m from Pantheon but somehow not a tourist trap. Third generation. Reservation mandatory. Excellent value for setting.", "lat": 41.8993, "lng": 12.4765, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Tonnarello", "Area": "Trastevere", "Cuisine Type": "Roman casual", "Price / Person (EUR)": "€20–35", "Price / Person (USD)": "31", "Reservation": "None - queue", "Booking Link": "tonnarello.it", "Signature Dishes": "Tonnarelli Cacio e Pepe; Carbonara; Polpette al sugo; Tiramisu", "Signature Drinks": "House Frascati; spritz", "Awards / Recognition": "#1 'walk-in Rome restaurant' on Reddit/TripAdvisor", "Best Time to Go": "Late lunch 2:30 PM", "Dress Code": "Casual", "Why Must-Try": "Outdoor seating on Via della Paglia in Trastevere = quintessential Rome dinner vibe. Big portions, reasonable prices.", "lat": 41.8893, "lng": 12.4682, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Sant'Eustachio Il Caffè", "Area": "Centro Storico", "Cuisine Type": "Coffee Bar", "Price / Person (EUR)": "€2–6", "Price / Person (USD)": "4", "Booking Link": "santeustachioilcaffe.com", "Signature Dishes": "Cornetto (Italian croissant)", "Signature Drinks": "Gran Caffè (signature pre-sweetened cappuccino); Granita di caffè con panna; Monachella", "Awards / Recognition": "Often voted 'best coffee in Rome' since 1938", "Best Time to Go": "Morning 8 AM standing at bar", "Why Must-Try": "Standing at the bar is half the price of sitting. Secret recipe Gran Caffè is sweetened at the espresso stage. 5 min walk from Pantheon.", "lat": 41.8977, "lng": 12.4751, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Otaleg", "Area": "Trastevere", "Cuisine Type": "Gelato", "Price / Person (EUR)": "€3–6", "Price / Person (USD)": "4", "Booking Link": "otaleg.com", "Signature Dishes": "Pistacchio di Bronte (DOP from Sicily); Cioccolato Fondente; Cardamom; Olive Oil + Vanilla", "Signature Drinks": "Affogato (espresso + gelato)", "Awards / Recognition": "Gambero Rosso 3 Coni (top tier) consistently 2022–2026", "Best Time to Go": "After dinner 9 PM", "Why Must-Try": "Gelato' spelled backwards. The serious gelato spot. Mad scientist flavors next to perfect classics. Small batches, made daily.", "lat": 41.8873, "lng": 12.4699, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Forno Campo de' Fiori", "Area": "Campo de' Fiori", "Cuisine Type": "Bakery / Pizza Bianca", "Price / Person (EUR)": "€3–7", "Price / Person (USD)": "5", "Booking Link": "-", "Signature Dishes": "Pizza Bianca (the original); Pizza Rossa; Pizza con la zucca (pumpkin flowers)", "Awards / Recognition": "Family-run since 1968; foundational Roman bakery", "Best Time to Go": "Mid-morning 10 AM", "Why Must-Try": "Right on Campo de' Fiori - grab a pizza bianca, walk and eat. Cheap, perfect, Roman.", "lat": 41.8957, "lng": 12.4722, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Marigold Roma", "Area": "Ostiense", "Cuisine Type": "New-wave brunch + bakery", "Price / Person (EUR)": "€15–35", "Price / Person (USD)": "27", "Reservation": "Recommended weekends", "Booking Link": "marigoldroma.com", "Signature Dishes": "Sourdough loaves; Brioche feuilletée; Brunch plates with eggs + local greens", "Signature Drinks": "Specialty coffee (drip + espresso); kombucha", "Awards / Recognition": "Italy's 50 Top Bakeries list; trendy younger crowd", "Best Time to Go": "Brunch 11 AM Sat/Sun", "Dress Code": "Casual", "Why Must-Try": "Where young Romans go on weekends. Best non-Italian-style brunch in Rome.", "lat": 41.8636, "lng": 12.479, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Freni e Frizioni", "Area": "Trastevere", "Cuisine Type": "Cocktail Bar", "Price / Person (EUR)": "€10–14/cocktail", "Price / Person (USD)": "13", "Reservation": "None - go early", "Booking Link": "-", "Signature Dishes": "Free aperitivo buffet 7–10 PM w/ drink purchase", "Signature Drinks": "Signature: Frenata (mezcal + chili); Negroni Sbagliato; reasonably priced classics", "Awards / Recognition": "World's 50 Best Bars longlist multiple years; Trastevere cocktail OG", "Best Time to Go": "Aperitivo 7:30 PM", "Dress Code": "Casual cool", "Why Must-Try": "Former mechanic's garage (hence the name is 'brakes and clutches'). Spills onto Piazza Trilussa; iconic Trastevere night.", "lat": 41.8907, "lng": 12.4719, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "The Court at Palazzo Manfredi", "Area": "Colosseum", "Cuisine Type": "Cocktail Bar with VIEW", "Price / Person (EUR)": "€18–25/cocktail", "Price / Person (USD)": "24", "Reservation": "Essential", "Booking Link": "quandoo.it", "Signature Dishes": "Tasting bites", "Signature Drinks": "Signature Negroni list; rare gin selection", "Awards / Recognition": "World's 50 Best Bars 2023, 2024; #1 'view bar' in Rome", "Best Time to Go": "Sunset 6 PM", "Dress Code": "Smart", "Why Must-Try": "Rooftop with the most direct view of Colosseum at sunset. Pricey but worth it once. Reservation absolutely required.", "lat": 41.8895, "lng": 12.496, "cat": "food", "catLabel": "Food & Drink", "icon": "🍝", "citywide": false}, {"name": "Wash Out (multiple locations)", "Category": "Laundry", "Address / Area": "Via degli Avignonesi 19 (Trevi) + 9 other locations", "What They Offer": "Self-service wash + dry. English-friendly signage. Eco detergent. Free Wi-Fi.", "Price (EUR)": "€4 - 5 wash / €4 dry (8kg)", "Price (USD)": "10", "Hours": "8 AM -10 PM daily", "Link / Phone": "washoutlaundromat.com", "Booking / Notes": "Walk-in. Card + cash. Most accessible self-service chain in Rome.", "lat": 41.9019, "lng": 12.4889, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "Anna Lavanderia Trastevere", "Address / Area": "Via San Francesco a Ripa 71, Trastevere", "What They Offer": "Full-service drop-off. Wash + dry + fold same-day if dropped by 10 AM.", "Price (EUR)": "€8/kg", "Price (USD)": "9", "Hours": "Mon–Sat 8:30 AM - 7 PM", "Link / Phone": "-", "Booking / Notes": "Walk-in. Cash preferred. Speak basic Italian or Google Translate.", "lat": 41.8869, "lng": 12.4715, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "Bolle Blu Self-Service", "Address / Area": "Via Milazzo 20 (Termini area)", "What They Offer": "Self-service, 24/7 unmanned location. Card payment.", "Price (EUR)": "€4 wash 8kg / €4 dry", "Price (USD)": "9", "Hours": "24/7", "Link / Phone": "-", "Booking / Notes": "No staff. Card-only. Useful near Termini transit.", "lat": 41.9019, "lng": 12.505, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "Wash-on-Demand (Pickup)", "Address / Area": "Online - covers all central Rome", "What They Offer": "ONLINE PICKUP service. Schedule via app/web; they collect, wash, return next day.", "Price (EUR)": "€18 for 8kg load", "Price (USD)": "20", "Hours": "Pickup Mon - Sat", "Link / Phone": "Splash Wash", "Booking / Notes": "Order via splashwash.it or laundryservice.it. Andrew's preferred option (online pickup).", "lat": 41.8955, "lng": 12.4823, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": true}, {"name": "iCare Rome (Apple Authorized)", "Category": "Phone Repair", "Address / Area": "Via dei Pettinari 79, Centro Storico", "What They Offer": "Apple Authorized Service Provider. iPhone, iPad, Mac repairs. Screen, battery, water damage.", "Price (EUR)": "Screen iPhone 15: €299–349 / Battery: €99", "Price (USD)": "327", "Hours": "Mon - Sat 10 AM - 7:30 PM", "Link / Phone": "icarerome.it", "Booking / Notes": "Walk-in OK; appointment via website preferred.", "lat": 41.8939, "lng": 12.472, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "R-Store Mac (Apple Authorized)", "Address / Area": "Via degli Scipioni 110, Prati (Vatican area)", "What They Offer": "Apple Authorized. All Apple device repairs + accessories.", "Price (EUR)": "Screen iPhone 14: ~€280 / Battery: ~€89", "Price (USD)": "311", "Hours": "Mon - Sat 10 AM - 7:30 PM", "Link / Phone": "r-store.it", "Booking / Notes": "Online appointment recommended. English-speaking staff.", "lat": 41.908, "lng": 12.462, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "Lime / Dott / Bird (e-scooters)", "Category": "Transport Rental", "Address / Area": "App-based, scooters everywhere", "What They Offer": "E-scooters via app. Helmet required. €0.30/min + €1 unlock.", "Price (EUR)": "~€5 for 15-min trip", "Price (USD)": "5", "Hours": "24/7 via app", "Link / Phone": "Lime / Dott apps", "Booking / Notes": "Must wear helmet (€100 fine). Max speed 20km/h. Cannot ride in pedestrian zones (lots in central Rome).", "lat": 41.895, "lng": 12.4823, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": true}, {"name": "Bici&Baci Rome (Vespa rental)", "Address / Area": "Via del Viminale 5 (Termini)", "What They Offer": "Vespa rental DIY. 50cc, 125cc, 300cc. Helmet + insurance included.", "Price (EUR)": "€60–110/day (50cc–300cc)", "Price (USD)": "93", "Hours": "Daily 8 AM – 7 PM", "Link / Phone": "bicibaci.com", "Booking / Notes": "Need valid car driving license (50cc) or motorcycle license (125+cc). US license ok for 50cc (need to ask for 125+cc) with International Driving Permit.", "lat": 41.9007, "lng": 12.4955, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "TopBike Rental (regular bikes + e-bikes)", "Address / Area": "Via Labicana 49 (near Colosseum)", "What They Offer": "City bikes, e-bikes, road bikes. Daily + multi-day rentals. Helmet + lock free.", "Price (EUR)": "City bike €15/day; E-bike €35/day", "Price (USD)": "27", "Hours": "Daily 9 AM – 7 PM", "Link / Phone": "topbikerental.com", "Booking / Notes": "Online or walk-in. ID required. E-bike useful for Appian Way day trip.", "lat": 41.8905, "lng": 12.495, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "Treno e Scooter (Roma Mobilità)", "Address / Area": "At Termini station", "What They Offer": "City public bike share. Cheap if quick trips. Free first 30 min with monthly pass.", "Price (EUR)": "€2/30min for tourists", "Price (USD)": "2", "Hours": "24/7", "Link / Phone": "romamobilita.it", "Booking / Notes": "App registration needed. Less popular than private services.", "lat": 41.901, "lng": 12.502, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "Holafly eSIM Italy", "Category": "Other Essentials", "Address / Area": "Online - digital", "What They Offer": "Unlimited data eSIM for Italy. Activate before arrival. No physical SIM needed.", "Price (EUR)": "€39 for 15 days unlimited / €54 30-day unlimited", "Price (USD)": "59", "Hours": "Online", "Link / Phone": "esim.holafly.com", "Booking / Notes": "Compare with Klook + Trip.com. Holafly is unlimited but more expensive. Andrew needs ≥3GB/day → unlimited makes sense.", "lat": 41.8955, "lng": 12.4823, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": true}, {"name": "Airalo eSIM (Bulk Data)", "Address / Area": "Online - digital", "What They Offer": "Pay-by-GB eSIM for Italy. Cheaper than unlimited if usage modest.", "Price (EUR)": "€18 for 20GB/30 days", "Price (USD)": "20", "Hours": "Online", "Link / Phone": "airalo.com", "Booking / Notes": "Best value for 30GB/month preference. Activate via QR code.", "lat": 41.8955, "lng": 12.4823, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": true}, {"name": "Farmacia Internazionale (24h Pharmacy)", "Address / Area": "Piazza Barberini 49", "What They Offer": "24-hour pharmacy. English-speaking. Most central in Rome.", "Price (EUR)": "Varies", "Price (USD)": "-", "Hours": "24/7", "Link / Phone": "P.za Barberini, 49", "Booking / Notes": "Walk-in. Carry passport if buying prescription.", "lat": 41.9038, "lng": 12.4884, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "Farmacia della Stazione Termini", "Address / Area": "Piazza dei Cinquecento", "What They Offer": "24h pharmacy inside main station. Tourist info available.", "Price (EUR)": "Varies", "Price (USD)": "-", "Hours": "24/7", "Link / Phone": "Farmacia della Stazione", "Booking / Notes": "Walk-in.", "lat": 41.9008, "lng": 12.5009, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "US Embassy Rome", "Address / Area": "Via Vittorio Veneto 121", "What They Offer": "Consular emergencies for US citizens. Lost passports.", "Price (USD)": "-", "Hours": "Mon–Fri 8:30 AM – 12 PM (appointment)", "Link / Phone": "it.usembassy.gov", "Booking / Notes": "For US citizen - keep this number: +39 06 4674 1. Emergencies after hours: same number routes to duty officer.", "lat": 41.9082, "lng": 12.4905, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": false}, {"name": "Emergency Numbers", "Address / Area": "-", "What They Offer": "112 = EU emergency (police/ambulance/fire all in one). Operators speak English.", "Price (EUR)": "Free", "Price (USD)": "-", "Hours": "24/7", "Link / Phone": "Italy 112", "Booking / Notes": "Use 112 for everything. Specific numbers: Police 113, Carabinieri 112, Ambulance 118, Fire 115.", "lat": 41.8955, "lng": 12.4823, "cat": "services", "catLabel": "Services", "icon": "🛠", "citywide": true}, {"name": "Hotel de la Ville (Rocco Forte)", "Tier": "HIGH-END", "Area": "Spanish Steps", "Address": "Hotel de la Ville, a Rocco Forte hotel", "Price/Night EUR (Low Season)": "€650", "Price/Night EUR (High Season)": "€950", "Price/Night USD (avg)": "948", "Google Rating": "4.7", "Top 3 Rooms + Price": "Deluxe Room ~€700; Junior Suite ~€1,100; Villa Borghese Suite ~€1,800", "Hotel Amenities": "Rooftop bar (Cielo); Sisley Spa; gym; 2 restaurants; Bvlgari amenities; concierge", "Closest Attractions / Walk Time": "Spanish Steps: 2 min walk; Trevi: 8 min; Piazza Navona: 12 min", "lat": 41.9047, "lng": 12.4869, "cat": "hotels", "catLabel": "Hotels", "icon": "🛏", "citywide": false}, {"name": "Palazzo Manfredi (Relais & Chateaux)", "Area": "Colosseum", "Address": "Palazzo Manfredi", "Price/Night EUR (Low Season)": "€600", "Price/Night EUR (High Season)": "€900", "Price/Night USD (avg)": "894", "Google Rating": "4.8", "Top 3 Rooms + Price": "Deluxe Colosseum View ~€800; Junior Suite Colosseum ~€1,200; Penthouse ~€2,500", "Hotel Amenities": "Aroma Restaurant (1 Michelin); The Court rooftop bar (50 Best Bars); spa; small gym", "Closest Attractions / Walk Time": "Colosseum: 2 min walk; Roman Forum: 5 min; Monti: 8 min", "lat": 41.8896, "lng": 12.4958, "cat": "hotels", "catLabel": "Hotels", "icon": "🛏", "citywide": false}, {"name": "The St. Regis Rome", "Area": "Termini / Via Veneto", "Address": "The St. Regis Rome", "Price/Night EUR (Low Season)": "€500", "Price/Night EUR (High Season)": "€820", "Price/Night USD (avg)": "785", "Google Rating": "4.6", "Top 3 Rooms + Price": "Superior Deluxe ~€550; Astor Suite ~€1,400; Royal Suite ~€5,500", "Hotel Amenities": "Butler service; Lumen Cocktails & Cuisine; Iridium Spa; 24h fitness center", "Closest Attractions / Walk Time": "Termini Station: 5 min walk (huge transit advantage); Trevi: 12 min; Spanish Steps: 10 min", "lat": 41.9036, "lng": 12.4955, "cat": "hotels", "catLabel": "Hotels", "icon": "🛏", "citywide": false}, {"name": "Hotel Artemide", "Tier": "MID-RANGE", "Area": "Termini area / Via Nazionale", "Address": "Hotel Artemide", "Price/Night EUR (Low Season)": "€180", "Price/Night EUR (High Season)": "€280", "Price/Night USD (avg)": "273", "Google Rating": "4.6", "Top 3 Rooms + Price": "Classic Double ~€200; Deluxe ~€260; Junior Suite ~€380", "Hotel Amenities": "Rooftop terrace; small spa + sauna; in-house gym; included breakfast; massage center", "Closest Attractions / Walk Time": "Trevi Fountain: 10 min walk; Colosseum: 15 min; Termini: 8 min (great transit)", "lat": 41.9013, "lng": 12.4915, "cat": "hotels", "catLabel": "Hotels", "icon": "🛏", "citywide": false}, {"name": "Hotel Hassler Roma", "Area": "Termini", "Address": "Hotel Hassler Roma", "Price/Night EUR (Low Season)": "€150", "Price/Night EUR (High Season)": "€230", "Price/Night USD (avg)": "229", "Google Rating": "4.4", "Top 3 Rooms + Price": "Standard ~€170; Superior ~€220; Family ~€320", "Hotel Amenities": "Restaurant, bar; small fitness corner; included breakfast; central location", "Closest Attractions / Walk Time": "Trevi: 12 min; Colosseum: 15 min; Termini: 6 min", "lat": 41.9059, "lng": 12.4828, "cat": "hotels", "catLabel": "Hotels", "icon": "🛏", "citywide": false}, {"name": "Hotel Smeraldo", "Area": "Centro Storico (near Campo de' Fiori)", "Address": "Hotel Smeraldo", "Price/Night EUR (Low Season)": "€140", "Price/Night EUR (High Season)": "€220", "Price/Night USD (avg)": "218", "Google Rating": "4.4", "Top 3 Rooms + Price": "Standard Double ~€150; Superior ~€200; Family ~€290", "Hotel Amenities": "Rooftop terrace; breakfast (extra); concierge. No on-site gym.", "Closest Attractions / Walk Time": "Campo de' Fiori: 2 min; Pantheon: 5 min; Piazza Navona: 4 min (BEST WALKABILITY)", "lat": 41.8949, "lng": 12.4747, "cat": "hotels", "catLabel": "Hotels", "icon": "🛏", "citywide": false}, {"name": "The RomeHello (Hostel + Private Rooms)", "Tier": "BUDGET", "Area": "Termini / Esquilino", "Address": "The RomeHello", "Price/Night EUR (Low Season)": "€35 dorm / €85 private", "Price/Night EUR (High Season)": "€55 dorm / €135 private", "Price/Night USD (avg)": "109", "Google Rating": "4.5", "Top 3 Rooms + Price": "6-bed Mixed Dorm ~€40; 4-bed Female Dorm ~€48; Private Twin ~€110", "Hotel Amenities": "Bar, common kitchen, lockers, breakfast €5; events; social hostel vibe", "Closest Attractions / Walk Time": "Termini: 6 min walk; Trevi: 15 min; Colosseum: 20 min", "lat": 41.9008, "lng": 12.492, "cat": "hotels", "catLabel": "Hotels", "icon": "🛏", "citywide": false}, {"name": "Hotel Trastevere", "Area": "Trastevere", "Address": "Hotel Trastevere", "Price/Night EUR (Low Season)": "€90", "Price/Night EUR (High Season)": "€155", "Price/Night USD (avg)": "147", "Google Rating": "4.2", "Top 3 Rooms + Price": "Standard Double ~€110; Triple ~€140; Quad ~€175", "Hotel Amenities": "Free Wi-Fi; air-con; small breakfast room. NO gym, no spa.", "Closest Attractions / Walk Time": "Trastevere center: <1 min (IN the neighborhood); Vatican: 25 min walk; Pantheon: 18 min walk", "lat": 41.8875, "lng": 12.47, "cat": "hotels", "catLabel": "Hotels", "icon": "🛏", "citywide": false}, {"name": "Generator Rome", "Area": "Termini / Esquilino", "Address": "Generator Rome", "Price/Night EUR (Low Season)": "€32 dorm / €80 private", "Price/Night EUR (High Season)": "€50 dorm / €120 private", "Price/Night USD (avg)": "93", "Google Rating": "4.3", "Top 3 Rooms + Price": "8-bed Dorm ~€35; 4-bed Dorm ~€48; Private Double ~€105", "Hotel Amenities": "Bar, café, library, social area, lockers. NO in-house gym.", "Closest Attractions / Walk Time": "Termini: 4 min walk (best transit access); Colosseum: 18 min; Trevi: 18 min", "lat": 41.8965, "lng": 12.506, "cat": "hotels", "catLabel": "Hotels", "icon": "🛏", "citywide": false}]};
+const PLACES = DATA.places;
+const TABS = DATA.tabs;
+const CATCOLOR={attractions:'#b0452c',activities:'#5f7339',food:'#c2792b',hotels:'#2f5d72',services:'#7d7468'};
+const CATICON ={attractions:'\u{1F3DB}',activities:'\u{1F3AB}',food:'\u{1F35D}',hotels:'\u{1F6CF}',services:'\u{1F6E0}'};
+const INTERNAL=new Set(['name','lat','lng','cat','catLabel','icon','citywide']);
+
+let mode='explore';
+let activeCats=new Set(TABS.map(t=>t.key));
+let selected=[]; // indices into PLACES, in order
+let confirmed=false;
+
+/* ---------- MAP ---------- */
+const map=L.map('map',{zoomControl:true,attributionControl:true}).setView([41.8955,12.4823],13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+  maxZoom:19, subdomains:'abcd',
+  attribution:'&copy; OpenStreetMap &middot; &copy; CARTO'
+}).addTo(map);
+
+function pinIcon(cat,opts={}){
+  const {dim=false,badge=null}=opts;
+  const col=CATCOLOR[cat];
+  return L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,30],
+    html:`<div class="pin ${dim?'dim':''}">
+      <div class="body" style="background:${col}"><span class="ic">${CATICON[cat]}</span></div>
+      ${badge!=null?`<div class="badge">${badge}</div>`:''}
+    </div>`});
+}
+
+function fieldRows(p){
+  let rows='';
+  for(const k of Object.keys(p)){
+    if(INTERNAL.has(k)) continue;
+    const v=p[k]; if(!v) continue;
+    rows+=`<div class="ic-row"><div class="ic-k">${k}</div><div class="ic-v">${v}</div></div>`;
+  }
+  return rows;
+}
+function infoCard(p){
+  return `<div class="ic-head" style="border-top:4px solid ${CATCOLOR[p.cat]}">
+      ${p.citywide?'<span class="ic-tag">City-wide</span>':''}
+      <div class="ic-cat" style="color:${CATCOLOR[p.cat]}">${p.icon} ${p.catLabel}</div>
+      <div class="ic-name">${p.name}</div>
+    </div><div class="ic-body">${fieldRows(p)}</div>`;
+}
+
+// build markers
+const markers=PLACES.map((p,i)=>{
+  const m=L.marker([p.lat,p.lng],{icon:pinIcon(p.cat)});
+  m.bindTooltip(infoCard(p),{direction:'top',className:'info-card',sticky:false,offset:[0,-12],opacity:1});
+  m._pi=i;
+  m.on('click',()=>{ if(mode==='route'&&!confirmed) toggleSelect(i); });
+  return m;
+});
+
+let routeLayer=L.layerGroup().addTo(map);
+
+function refreshMarkers(){
+  markers.forEach(m=>map.removeLayer(m));
+  routeLayer.clearLayers();
+  if(mode==='explore'){
+    markers.forEach((m,i)=>{ if(activeCats.has(PLACES[i].cat)){ m.setIcon(pinIcon(PLACES[i].cat)); m.addTo(map);} });
+  } else if(!confirmed){
+    markers.forEach((m,i)=>{
+      const pos=selected.indexOf(i);
+      m.setIcon(pinIcon(PLACES[i].cat,{dim:pos<0,badge:pos>=0?pos+1:null}));
+      m.addTo(map);
+    });
+  } else { drawRoute(); }
+}
+
+function drawRoute(){
+  const pts=selected.map(i=>PLACES[i]);
+  const latlngs=pts.map(p=>[p.lat,p.lng]);
+  selected.forEach((i,pos)=>{ markers[i].setIcon(pinIcon(PLACES[i].cat,{badge:pos+1})); markers[i].addTo(map); });
+  L.polyline(latlngs,{color:'#241d14',weight:3,opacity:.85,dashArray:'1 9',lineCap:'round'}).addTo(routeLayer);
+  L.polyline(latlngs,{color:'#b0452c',weight:2.5,opacity:.9}).addTo(routeLayer);
+  for(let k=0;k<pts.length-1;k++){
+    const mid=[(pts[k].lat+pts[k+1].lat)/2,(pts[k].lng+pts[k+1].lng)/2];
+    const d=haversine(pts[k],pts[k+1]);
+    L.marker(mid,{icon:L.divIcon({className:'',html:`<div class="leg-dist-label">${fmtKm(d)}</div>`,iconSize:[0,0]}),interactive:false}).addTo(routeLayer);
+  }
+  map.fitBounds(L.latLngBounds(latlngs).pad(.18));
+}
+
+function haversine(a,b){
+  const R=6371,toR=x=>x*Math.PI/180;
+  const dLat=toR(b.lat-a.lat),dLng=toR(b.lng-a.lng);
+  const s=Math.sin(dLat/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
+}
+const fmtKm=d=>d<1?Math.round(d*1000)+' m':d.toFixed(d<10?1:0)+' km';
+
+/* ---------- SELECTION ---------- */
+function toggleSelect(i){
+  const pos=selected.indexOf(i);
+  if(pos>=0) selected.splice(pos,1);
+  else{ if(selected.length>=20){flash();return;} selected.push(i); }
+  renderRoutePanel(); refreshMarkers();
+}
+let flashTimer=null;
+function flash(){ const c=document.getElementById('cap'); if(!c)return; c.style.color='#b0452c';c.style.transition='none';
+  clearTimeout(flashTimer); flashTimer=setTimeout(()=>{c.style.transition='.6s';c.style.color='';},40); }
+
+/* ---------- MODE ---------- */
+function setMode(m){
+  mode=m; confirmed=false;
+  document.getElementById('seg-explore').classList.toggle('on',m==='explore');
+  document.getElementById('seg-route').classList.toggle('on',m==='route');
+  if(m==='explore') renderExplore(); else renderRoutePanel();
+  refreshMarkers();
+  if(m==='explore') map.setView([41.8955,12.4823],13);
+}
+
+/* ---------- EXPLORE PANEL ---------- */
+function renderExplore(){
+  const counts={}; TABS.forEach(t=>counts[t.key]=PLACES.filter(p=>p.cat===t.key).length);
+  let chips=`<div class="chip all ${activeCats.size===TABS.length?'on':''}" onclick="toggleAll()">
+      <span>All Places</span><span class="ct">${PLACES.length}</span></div>`;
+  TABS.forEach(t=>{
+    chips+=`<div class="chip ${activeCats.has(t.key)?'on':''}" onclick="toggleCat('${t.key}')">
+      <span class="dot" style="background:${CATCOLOR[t.key]}"></span><span>${t.label}</span><span class="ct">${counts[t.key]}</span></div>`;
+  });
+  let list='';
+  TABS.forEach(t=>{
+    if(!activeCats.has(t.key))return;
+    const items=PLACES.map((p,i)=>[p,i]).filter(([p])=>p.cat===t.key);
+    list+=`<div class="pl-cat">${t.icon} ${t.label}</div>`;
+    items.forEach(([p,i])=>{
+      const meta=p['Area / District']||p['Area']||p['Address / Area']||p['Address']||p['Type']||p['Schedule / Time']||'';
+      list+=`<div class="pl" onmouseenter="hi(${i})" onclick="focusPin(${i})">
+        <div class="bar" style="background:${CATCOLOR[p.cat]}"></div>
+        <div><div class="nm">${p.name}</div><div class="meta">${meta}</div></div></div>`;
+    });
+  });
+  document.getElementById('sbody').innerHTML=
+    `<div class="chips">${chips}</div>
+     <div class="muted">Tap a category to filter the map. Hover any marker for its full info card.</div>
+     <div class="divider"></div>
+     <div class="plist">${list}</div>`;
+  document.getElementById('selfoot').innerHTML='';
+  renderLegend();
+}
+function toggleCat(k){ if(activeCats.has(k)){activeCats.delete(k); if(activeCats.size===0)activeCats.add(k);} else activeCats.add(k); renderExplore(); refreshMarkers(); }
+function toggleAll(){ activeCats=new Set(TABS.map(t=>t.key)); renderExplore(); refreshMarkers(); }
+function hi(i){ markers[i].openTooltip&&markers[i].openTooltip(); }
+function focusPin(i){ const p=PLACES[i]; map.setView([p.lat,p.lng],15,{animate:true}); markers[i].openTooltip(); if(window.innerWidth<=860) closeMenu(); }
+
+/* ---------- ROUTE PANEL ---------- */
+let routeQuery='';
+function renderRoutePanel(){
+  if(confirmed){ renderRouteSummary(); return; }
+  const q=routeQuery.toLowerCase();
+  let list='';
+  TABS.forEach(t=>{
+    const items=PLACES.map((p,i)=>[p,i]).filter(([p])=>p.cat===t.key &&
+      (p.name.toLowerCase().includes(q)|| (p.catLabel||'').toLowerCase().includes(q)));
+    if(!items.length)return;
+    list+=`<div class="pl-cat">${t.icon} ${t.label}</div>`;
+    items.forEach(([p,i])=>{
+      const pos=selected.indexOf(i); const sel=pos>=0;
+      const dis=!sel&&selected.length>=20;
+      const meta=p['Area / District']||p['Area']||p['Address / Area']||p['Address']||p['Type']||'';
+      list+=`<div class="rrow ${sel?'sel':''} ${dis?'disabled':''}" onclick="${dis?'':`toggleSelect(${i})`}">
+        <div class="rcheck">${sel?'\u2713':''}</div>
+        <div><div class="rnm">${p.name}</div><div class="rmeta">${meta}</div></div>
+        ${sel?`<div class="ridx">${pos+1}</div>`:''}</div>`;
+    });
+  });
+  document.getElementById('sbody').innerHTML=
+    `<div class="muted">Build a custom route from <b>all ${PLACES.length} places</b> across every tab. Select between 2 and 20 stops, then confirm to draw the route and measure distances.</div>
+     <input class="search" placeholder="Search all places..." value="${routeQuery}" oninput="onSearch(this.value)"/>
+     <div class="plist">${list||'<div class="muted">No matches.</div>'}</div>`;
+  const n=selected.length, ok=n>=2&&n<=20;
+  document.getElementById('selfoot').innerHTML=
+    `<div class="sel-foot">
+       <div class="counter"><span id="cap"><b>${n}</b> / 20 selected</span>
+         <span class="hint">${n<2?'pick at least 2':(n>20?'too many':'ready to map')}</span></div>
+       <button class="btn rust" ${ok?'':'disabled'} onclick="confirmRoute()">Confirm &amp; Draw Route</button>
+       ${n?`<button class="btn ghost" onclick="clearSel()">Clear selection</button>`:''}
+     </div>`;
+  renderLegend();
+}
+function onSearch(v){ routeQuery=v; renderRoutePanel(); }
+function clearSel(){ selected=[]; confirmed=false; renderRoutePanel(); refreshMarkers(); }
+function confirmRoute(){ if(selected.length<2||selected.length>20)return; confirmed=true; renderRouteSummary(); refreshMarkers(); if(window.innerWidth<=860) closeMenu(); }
+
+function renderRouteSummary(){
+  const pts=selected.map(i=>PLACES[i]);
+  let total=0; const legs=[];
+  for(let k=0;k<pts.length-1;k++){ const d=haversine(pts[k],pts[k+1]); total+=d; legs.push(d); }
+  const walkMin=Math.round(total/4.8*60);
+  let rows='';
+  pts.forEach((p,k)=>{
+    rows+=`<div class="leg"><div class="legn">${k+1}</div>
+      <div><div class="legname">${p.name}</div><div class="legcat">${p.icon} ${p.catLabel}</div></div></div>`;
+    if(k<pts.length-1) rows+=`<div style="display:flex;align-items:center;gap:8px"><div class="legbar"></div>
+      <div class="legdist">&darr; ${fmtKm(legs[k])}</div></div>`;
+  });
+  document.getElementById('sbody').innerHTML=
+    `<div class="route-sum">
+      <div class="pl-cat" style="margin-top:2px">Your Custom Route</div>
+      <div class="rs-stat">
+        <div class="rs-card"><div class="v">${pts.length}</div><div class="l">Stops</div></div>
+        <div class="rs-card"><div class="v">${total.toFixed(1)}</div><div class="l">Total km</div></div>
+        <div class="rs-card"><div class="v">~${walkMin}</div><div class="l">Min walk</div></div>
+      </div>
+      <div class="muted">Distances are straight-line (point to point). Walking estimate at 4.8 km/h. Order follows your selection sequence.</div>
+      <div class="divider"></div>
+      ${rows}
+     </div>`;
+  document.getElementById('selfoot').innerHTML=
+    `<div class="sel-foot">
+       <button class="btn" onclick="editRoute()">Edit selection</button>
+       <button class="btn ghost" onclick="clearSel()">Start over</button>
+     </div>`;
+  renderLegend();
+}
+function editRoute(){ confirmed=false; renderRoutePanel(); refreshMarkers(); }
+
+/* ---------- LEGEND ---------- */
+function renderLegend(){
+  let r=TABS.map(t=>`<div class="lr"><span class="ld" style="background:${CATCOLOR[t.key]}"></span>${t.label}</div>`).join('');
+  document.getElementById('legend').innerHTML=`<h4>Legend</h4>${r}`;
+}
+
+/* ---------- MOBILE ---------- */
+function toggleMenu(){ document.getElementById('side').classList.toggle('open'); }
+function closeMenu(){ document.getElementById('side').classList.remove('open'); }
+
+/* init */
+renderExplore(); refreshMarkers(); renderLegend();
+setTimeout(()=>map.invalidateSize(),300);
+</script>
+</body>
+</html>
