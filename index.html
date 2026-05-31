@@ -129,19 +129,28 @@ html,body{margin:0;height:100%;font-family:'Spectral',Georgia,serif;color:var(--
   color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;
   font-family:'Fraunces';font-weight:700;font-size:11px;z-index:5}
 
-/* info card tooltip */
-.leaflet-tooltip.info-card{background:#fbf4e4;border:1.5px solid var(--ink);border-radius:7px;
-  box-shadow:0 22px 50px -18px rgba(30,20,8,.6);padding:0;max-width:312px;white-space:normal;
-  font-family:'Spectral';color:var(--ink);opacity:1!important}
-.leaflet-tooltip.info-card:before{display:none}
-.ic-head{padding:13px 15px 10px;border-bottom:1px dashed var(--line);position:relative}
-.ic-cat{font-family:'Fraunces';font-weight:600;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase}
-.ic-name{font-family:'Fraunces';font-weight:700;font-size:18px;line-height:1.12;margin-top:4px}
-.ic-body{padding:10px 15px 14px;max-height:260px;overflow:auto}
-.ic-row{margin:7px 0}
-.ic-k{font-family:'Fraunces';font-weight:600;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--rust)}
-.ic-v{font-size:12.8px;line-height:1.4;margin-top:1px}
-.ic-tag{position:absolute;right:13px;top:13px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+/* info card popup (interactive: hover-open, stays, scrollable, links clickable) */
+.info-card .leaflet-popup-content-wrapper{background:#fbf4e4;border:1.6px solid var(--ink);border-radius:10px;
+  box-shadow:0 26px 60px -18px rgba(30,20,8,.62);padding:0;overflow:hidden}
+.info-card .leaflet-popup-content{margin:0;width:300px!important;font-family:'Spectral';color:var(--ink);line-height:1.45}
+.info-card .leaflet-popup-tip{background:#fbf4e4;border:1.6px solid var(--ink);box-shadow:none}
+.info-card a.leaflet-popup-close-button{color:var(--paper);background:var(--ink);width:24px;height:24px;
+  border-radius:50%;top:9px;right:9px;font-size:17px;line-height:22px;font-weight:400;
+  display:flex;align-items:center;justify-content:center;z-index:10;transition:.15s}
+.info-card a.leaflet-popup-close-button:hover{background:var(--rust);color:#fff}
+.ic-head{padding:14px 38px 11px 16px;border-bottom:1px dashed var(--line);position:relative;background:#f6ecd6}
+.ic-cat{font-family:'Fraunces';font-weight:600;font-size:10px;letter-spacing:.2em;text-transform:uppercase}
+.ic-name{font-family:'Fraunces';font-weight:700;font-size:19px;line-height:1.14;margin-top:5px}
+.ic-body{padding:12px 16px 15px;max-height:262px;overflow-y:auto;overscroll-behavior:contain}
+.ic-body::-webkit-scrollbar{width:8px}
+.ic-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+.ic-row{margin:9px 0}
+.ic-row:first-child{margin-top:0}
+.ic-k{font-family:'Fraunces';font-weight:600;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--rust)}
+.ic-v{font-size:13.5px;line-height:1.5;margin-top:2px}
+.ic-v a{color:var(--c-hotels);font-weight:600;text-decoration:underline;text-underline-offset:2px;word-break:break-word}
+.ic-v a:hover{color:var(--rust)}
+.ic-tag{position:absolute;right:38px;top:14px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;
   background:var(--gold);color:#fff;padding:2px 7px;border-radius:3px;font-family:'Fraunces';font-weight:600}
 
 /* mobile toggle */
@@ -216,12 +225,23 @@ function pinIcon(cat,opts={}){
     </div>`});
 }
 
+function linkify(v){
+  // turn standalone domains / urls into clickable links; leave plain names & phones as text
+  return String(v).split(/(\s+)/).map(tok=>{
+    const t=tok.trim();
+    if(!t) return tok;
+    if(/^https?:\/\/[^\s]+$/i.test(t)) return `<a href="${t}" target="_blank" rel="noopener">${t}</a>`;
+    if(/^[a-z0-9][a-z0-9.\-]*\.[a-z]{2,}(\/[^\s]*)?$/i.test(t) && !/[€$]/.test(t))
+      return `<a href="https://${t}" target="_blank" rel="noopener">${t}</a>`;
+    return tok;
+  }).join('');
+}
 function fieldRows(p){
   let rows='';
   for(const k of Object.keys(p)){
     if(INTERNAL.has(k)) continue;
     const v=p[k]; if(!v) continue;
-    rows+=`<div class="ic-row"><div class="ic-k">${k}</div><div class="ic-v">${v}</div></div>`;
+    rows+=`<div class="ic-row"><div class="ic-k">${k}</div><div class="ic-v">${linkify(v)}</div></div>`;
   }
   return rows;
 }
@@ -233,12 +253,14 @@ function infoCard(p){
     </div><div class="ic-body">${fieldRows(p)}</div>`;
 }
 
-// build markers
+// build markers (interactive popups: open on hover, stay open so you can scroll & click links)
 const markers=PLACES.map((p,i)=>{
   const m=L.marker([p.lat,p.lng],{icon:pinIcon(p.cat)});
-  m.bindTooltip(infoCard(p),{direction:'top',className:'info-card',sticky:false,offset:[0,-12],opacity:1});
+  m.bindPopup(infoCard(p),{className:'info-card',maxWidth:300,minWidth:300,
+    autoClose:true,closeOnClick:true,autoPan:true,autoPanPadding:[40,40],keepInView:true});
   m._pi=i;
-  m.on('click',()=>{ if(mode==='route'&&!confirmed) toggleSelect(i); });
+  m.on('mouseover',()=>{ m.openPopup(); });
+  m.on('click',()=>{ if(mode==='route'&&!confirmed){ toggleSelect(i); m.closePopup(); } });
   return m;
 });
 
@@ -332,8 +354,8 @@ function renderExplore(){
 }
 function toggleCat(k){ if(activeCats.has(k)){activeCats.delete(k); if(activeCats.size===0)activeCats.add(k);} else activeCats.add(k); renderExplore(); refreshMarkers(); }
 function toggleAll(){ activeCats=new Set(TABS.map(t=>t.key)); renderExplore(); refreshMarkers(); }
-function hi(i){ markers[i].openTooltip&&markers[i].openTooltip(); }
-function focusPin(i){ const p=PLACES[i]; map.setView([p.lat,p.lng],15,{animate:true}); markers[i].openTooltip(); if(window.innerWidth<=860) closeMenu(); }
+function hi(i){ markers[i].openPopup&&markers[i].openPopup(); }
+function focusPin(i){ const p=PLACES[i]; map.setView([p.lat,p.lng],15,{animate:true}); markers[i].openPopup(); if(window.innerWidth<=860) closeMenu(); }
 
 /* ---------- ROUTE PANEL ---------- */
 let routeQuery='';
