@@ -115,6 +115,24 @@ html,body{margin:0;height:100%;font-family:'Spectral',Georgia,serif;color:var(--
 .legdist{margin-left:auto;font-size:11.5px;color:var(--rust);font-weight:600;white-space:nowrap}
 .legbar{margin-left:13px;border-left:2px dashed var(--line);height:13px}
 
+/* travel mode toggle */
+.modes{display:flex;gap:6px;margin:2px 0 12px}
+.mode{flex:1;border:1.5px solid var(--line);background:#fff8ec;border-radius:7px;padding:9px 4px 7px;
+  text-align:center;cursor:pointer;transition:.14s;position:relative}
+.mode .mi{font-size:18px;line-height:1}
+.mode .ml{font-family:'Fraunces';font-weight:600;font-size:10px;letter-spacing:.05em;margin-top:3px}
+.mode.on{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.mode .rec{position:absolute;top:-8px;right:-6px;background:var(--gold);color:#fff;font-family:'Fraunces';
+  font-weight:700;font-size:8px;letter-spacing:.08em;padding:2px 5px;border-radius:8px;text-transform:uppercase}
+.tip{background:#fff8ec;border-left:3px solid var(--gold);border-radius:0 6px 6px 0;padding:10px 13px;
+  font-size:12.5px;line-height:1.5;color:var(--ink2);margin:2px 0 12px}
+.tip b{color:var(--ink);font-style:normal}
+.btn.maps{background:var(--c-hotels);margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+.loadrow{display:flex;align-items:center;gap:10px;font-style:italic;color:var(--ink2);font-size:13px;padding:8px 0}
+.spin{width:16px;height:16px;border:2.5px solid var(--line);border-top-color:var(--rust);border-radius:50%;
+  animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
 /* ---- Map ---- */
 #map{flex:1;height:100%;background:#e8e0cf}
 .leaflet-container{font-family:'Spectral',serif;background:#eee6d4}
@@ -207,6 +225,10 @@ let mode='explore';
 let activeCats=new Set(TABS.map(t=>t.key));
 let selected=[]; // indices into PLACES, in order
 let confirmed=false;
+let travelMode='walk';   // walk | bike | drive | transit
+let routeData=null;      // {coords:[[lat,lng]...], distance, duration, legs:[{distance,duration}]}
+let routeLoading=false;
+let routeFallback=false; // true if street routing failed and straight-line used
 
 /* ---------- MAP ---------- */
 const map=L.map('map',{zoomControl:true,attributionControl:true}).setView([41.8955,12.4823],13);
@@ -280,18 +302,63 @@ function refreshMarkers(){
   } else { drawRoute(); }
 }
 
+const MODEMETA={
+  walk :{label:'Walk', icon:'\u{1F6B6}', service:'routed-foot', gm:'walking',   speed:4.8, oneway:'ignored (pedestrians use streets both ways)'},
+  bike :{label:'Bike', icon:'\u{1F6B2}', service:'routed-bike', gm:'bicycling', speed:15,  oneway:'mostly followed (bike lanes/contraflow vary)'},
+  drive:{label:'Drive',icon:'\u{1F697}', service:'routed-car',  gm:'driving',   speed:22,  oneway:'respected (one-way streets enforced)'},
+  transit:{label:'Transit',icon:'\u{1F68C}',service:null,       gm:'transit',   speed:18,  oneway:'n/a'}
+};
+
+async function fetchRoute(){
+  const pts=selected.map(i=>PLACES[i]);
+  const mm=MODEMETA[travelMode];
+  routeLoading=true; routeData=null; routeFallback=false; renderRouteSummary(); refreshMarkers();
+  // transit has no free no-key router we can draw; use straight-line preview + Google Maps handoff
+  if(!mm.service){
+    buildStraightLine(pts); routeLoading=false; renderRouteSummary(); refreshMarkers(); return;
+  }
+  try{
+    const coordStr=pts.map(p=>`${p.lng},${p.lat}`).join(';');
+    const url=`https://routing.openstreetmap.de/${mm.service}/route/v1/driving/${coordStr}?overview=full&geometries=geojson&annotations=false`;
+    const r=await fetch(url,{mode:'cors'});
+    if(!r.ok) throw new Error('http '+r.status);
+    const j=await r.json();
+    if(!j.routes||!j.routes.length) throw new Error('no route');
+    const rt=j.routes[0];
+    routeData={
+      coords: rt.geometry.coordinates.map(c=>[c[1],c[0]]),
+      distance: rt.distance/1000,
+      duration: rt.duration/60,
+      legs: (rt.legs||[]).map(l=>({distance:l.distance/1000,duration:l.duration/60}))
+    };
+  }catch(e){
+    routeFallback=true; buildStraightLine(pts);
+  }
+  routeLoading=false; renderRouteSummary(); refreshMarkers();
+}
+
+function buildStraightLine(pts){
+  let total=0; const legs=[];
+  for(let k=0;k<pts.length-1;k++){ const d=haversine(pts[k],pts[k+1]); legs.push({distance:d,duration:d/MODEMETA[travelMode].speed*60}); total+=d; }
+  routeData={coords:pts.map(p=>[p.lat,p.lng]),distance:total,duration:total/MODEMETA[travelMode].speed*60,legs,straight:true};
+}
+
 function drawRoute(){
   const pts=selected.map(i=>PLACES[i]);
-  const latlngs=pts.map(p=>[p.lat,p.lng]);
   selected.forEach((i,pos)=>{ markers[i].setIcon(pinIcon(PLACES[i].cat,{badge:pos+1})); markers[i].addTo(map); });
-  L.polyline(latlngs,{color:'#241d14',weight:3,opacity:.85,dashArray:'1 9',lineCap:'round'}).addTo(routeLayer);
-  L.polyline(latlngs,{color:'#b0452c',weight:2.5,opacity:.9}).addTo(routeLayer);
+  if(!routeData){ map.fitBounds(L.latLngBounds(pts.map(p=>[p.lat,p.lng])).pad(.18)); return; }
+  const line=routeData.coords;
+  const dashed=routeData.straight;
+  L.polyline(line,{color:'#241d14',weight:6,opacity:.18,lineCap:'round',lineJoin:'round'}).addTo(routeLayer);
+  L.polyline(line,{color:'#b0452c',weight:3.4,opacity:.95,lineCap:'round',lineJoin:'round',
+    dashArray:dashed?'2 9':null}).addTo(routeLayer);
+  // per-leg distance labels at each stop's midpoint to next
   for(let k=0;k<pts.length-1;k++){
     const mid=[(pts[k].lat+pts[k+1].lat)/2,(pts[k].lng+pts[k+1].lng)/2];
-    const d=haversine(pts[k],pts[k+1]);
+    const d=routeData.legs[k]?routeData.legs[k].distance:haversine(pts[k],pts[k+1]);
     L.marker(mid,{icon:L.divIcon({className:'',html:`<div class="leg-dist-label">${fmtKm(d)}</div>`,iconSize:[0,0]}),interactive:false}).addTo(routeLayer);
   }
-  map.fitBounds(L.latLngBounds(latlngs).pad(.18));
+  map.fitBounds(L.latLngBounds(line).pad(.15));
 }
 
 function haversine(a,b){
@@ -301,6 +368,16 @@ function haversine(a,b){
   return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
 }
 const fmtKm=d=>d<1?Math.round(d*1000)+' m':d.toFixed(d<10?1:0)+' km';
+const fmtMin=m=>{ m=Math.round(m); if(m<60)return m+' min'; const h=Math.floor(m/60); return h+' h '+(m%60)+' min'; };
+
+// straight-line span used only to recommend a mode (independent of fetched route)
+function spanKm(){ const pts=selected.map(i=>PLACES[i]); let t=0; for(let k=0;k<pts.length-1;k++)t+=haversine(pts[k],pts[k+1]); return t; }
+function recommendMode(){
+  const km=spanKm();
+  if(km<=2.2) return {mode:'walk', why:`Total span is about ${km.toFixed(1)} km. In Rome's historic core, walking is fastest door to door and you see the city between stops.`};
+  if(km<=6)   return {mode:'transit', why:`About ${km.toFixed(1)} km. A mix of walking plus a metro or bus hop is efficient. Driving is hampered by ZTL limited-traffic zones in the center.`};
+  return {mode:'transit', why:`About ${km.toFixed(1)} km. Public transport (metro + bus/tram) or a taxi is best for this spread; central driving faces ZTL restrictions and scarce parking.`};
+}
 
 /* ---------- SELECTION ---------- */
 function toggleSelect(i){
@@ -379,7 +456,7 @@ function renderRoutePanel(){
     });
   });
   document.getElementById('sbody').innerHTML=
-    `<div class="muted">Build a custom route from <b>all ${PLACES.length} places</b> across every tab. Select between 2 and 20 stops, then confirm to draw the route and measure distances.</div>
+    `<div class="muted">Build a custom route from <b>all ${PLACES.length} places</b> across every tab. Select 2 to 20 stops, then confirm to draw the route along <b>real streets</b> with walk / bike / drive options and a suggested travel mode.</div>
      <input class="search" placeholder="Search all places..." value="${routeQuery}" oninput="onSearch(this.value)"/>
      <div class="plist">${list||'<div class="muted">No matches.</div>'}</div>`;
   const n=selected.length, ok=n>=2&&n<=20;
@@ -393,41 +470,89 @@ function renderRoutePanel(){
   renderLegend();
 }
 function onSearch(v){ routeQuery=v; renderRoutePanel(); }
-function clearSel(){ selected=[]; confirmed=false; renderRoutePanel(); refreshMarkers(); }
-function confirmRoute(){ if(selected.length<2||selected.length>20)return; confirmed=true; renderRouteSummary(); refreshMarkers(); if(window.innerWidth<=860) closeMenu(); }
+function clearSel(){ selected=[]; confirmed=false; routeData=null; routeLoading=false; renderRoutePanel(); refreshMarkers(); }
+function confirmRoute(){
+  if(selected.length<2||selected.length>20)return;
+  confirmed=true; travelMode=recommendMode().mode; routeData=null;
+  renderRouteSummary(); refreshMarkers();
+  if(window.innerWidth<=860) closeMenu();
+  fetchRoute();
+}
+function setTravelMode(m){ if(m===travelMode)return; travelMode=m; fetchRoute(); }
+function gmapsUrl(){
+  const pts=selected.map(i=>PLACES[i]);
+  const o=pts[0], d=pts[pts.length-1], wp=pts.slice(1,-1).map(p=>`${p.lat},${p.lng}`).join('|');
+  let u=`https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lng}&destination=${d.lat},${d.lng}&travelmode=${MODEMETA[travelMode].gm}`;
+  if(wp) u+=`&waypoints=${encodeURIComponent(wp)}`;
+  return u;
+}
 
 function renderRouteSummary(){
   const pts=selected.map(i=>PLACES[i]);
-  let total=0; const legs=[];
-  for(let k=0;k<pts.length-1;k++){ const d=haversine(pts[k],pts[k+1]); total+=d; legs.push(d); }
-  const walkMin=Math.round(total/4.8*60);
-  let rows='';
-  pts.forEach((p,k)=>{
-    rows+=`<div class="leg"><div class="legn">${k+1}</div>
-      <div><div class="legname">${p.name}</div><div class="legcat">${p.icon} ${p.catLabel}</div></div></div>`;
-    if(k<pts.length-1) rows+=`<div style="display:flex;align-items:center;gap:8px"><div class="legbar"></div>
-      <div class="legdist">&darr; ${fmtKm(legs[k])}</div></div>`;
-  });
+  const rec=recommendMode();
+  const mm=MODEMETA[travelMode];
+
+  let modes=Object.keys(MODEMETA).map(k=>{
+    const m=MODEMETA[k];
+    return `<div class="mode ${k===travelMode?'on':''}" onclick="setTravelMode('${k}')">
+      ${k===rec.mode?'<span class="rec">Best</span>':''}
+      <div class="mi">${m.icon}</div><div class="ml">${m.label}</div></div>`;
+  }).join('');
+
+  // stats + legs depend on fetched routeData
+  let dist='--', eta='--', legsHtml='', note='';
+  if(routeLoading){
+    note=`<div class="loadrow"><span class="spin"></span> Calculating ${mm.label.toLowerCase()} route along real streets...</div>`;
+  } else if(travelMode==='transit'){
+    dist = routeData?routeData.distance.toFixed(1):spanKm().toFixed(1);
+    eta='see app';
+    note=`<div class="tip"><b>Public transport.</b> Live transit routing (metro lines A/B/C, buses, trams) needs a transit app. Open the route in Google Maps below for real-time schedules and connections. The map line shown is a direct preview, not the bus path.</div>`;
+    legsHtml=legList(pts,routeData);
+  } else if(routeData){
+    dist=routeData.distance.toFixed(1);
+    eta=fmtMin(routeData.duration);
+    note=`<div class="tip"><b>One-way roads:</b> ${mm.oneway}. ${routeFallback?'Live street routing was unavailable, so a straight-line estimate is shown.':'Route follows the actual street network.'}</div>`;
+    legsHtml=legList(pts,routeData);
+  }
+
   document.getElementById('sbody').innerHTML=
     `<div class="route-sum">
       <div class="pl-cat" style="margin-top:2px">Your Custom Route</div>
+      <div class="modes">${modes}</div>
+      <div class="tip" style="border-left-color:var(--rust)"><b>Suggested:</b> ${MODEMETA[rec.mode].icon} ${MODEMETA[rec.mode].label}. ${rec.why}</div>
       <div class="rs-stat">
         <div class="rs-card"><div class="v">${pts.length}</div><div class="l">Stops</div></div>
-        <div class="rs-card"><div class="v">${total.toFixed(1)}</div><div class="l">Total km</div></div>
-        <div class="rs-card"><div class="v">~${walkMin}</div><div class="l">Min walk</div></div>
+        <div class="rs-card"><div class="v">${dist}</div><div class="l">Total km</div></div>
+        <div class="rs-card"><div class="v" style="font-size:18px;padding-top:4px">${eta}</div><div class="l">${mm.label} time</div></div>
       </div>
-      <div class="muted">Distances are straight-line (point to point). Walking estimate at 4.8 km/h. Order follows your selection sequence.</div>
+      ${note}
       <div class="divider"></div>
-      ${rows}
+      ${legsHtml}
      </div>`;
   document.getElementById('selfoot').innerHTML=
     `<div class="sel-foot">
-       <button class="btn" onclick="editRoute()">Edit selection</button>
+       <a class="btn maps" href="${gmapsUrl()}" target="_blank" rel="noopener">\u{1F5FA} Open in Google Maps (${mm.label})</a>
+       <button class="btn ghost" onclick="editRoute()">Edit selection</button>
        <button class="btn ghost" onclick="clearSel()">Start over</button>
      </div>`;
   renderLegend();
 }
-function editRoute(){ confirmed=false; renderRoutePanel(); refreshMarkers(); }
+function legList(pts,rd){
+  let rows='';
+  pts.forEach((p,k)=>{
+    rows+=`<div class="leg"><div class="legn">${k+1}</div>
+      <div><div class="legname">${p.name}</div><div class="legcat">${p.icon} ${p.catLabel}</div></div></div>`;
+    if(k<pts.length-1){
+      const leg=rd&&rd.legs&&rd.legs[k];
+      const d=leg?fmtKm(leg.distance):fmtKm(haversine(pts[k],pts[k+1]));
+      const t=leg&&travelMode!=='transit'?' &middot; '+fmtMin(leg.duration):'';
+      rows+=`<div style="display:flex;align-items:center;gap:8px"><div class="legbar"></div>
+        <div class="legdist">&darr; ${d}${t}</div></div>`;
+    }
+  });
+  return rows;
+}
+function editRoute(){ confirmed=false; routeData=null; routeLoading=false; renderRoutePanel(); refreshMarkers(); }
 
 /* ---------- LEGEND ---------- */
 function renderLegend(){
